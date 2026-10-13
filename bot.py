@@ -7,6 +7,8 @@ os.environ['HTTPS_PROXY'] = ''
 import datetime
 import sqlite3
 from zoneinfo import ZoneInfo
+from threading import Thread
+from flask import Flask
 import telebot
 from telebot import types, apihelper
 
@@ -23,6 +25,21 @@ BY_TZ = ZoneInfo("Europe/Minsk")
 apihelper.proxy = None
 
 bot = telebot.TeleBot(TOKEN)
+
+# --- FLASK СЕРВЕР ДЛЯ УДЕРЖАНИЯ БОДРСТВОВАНИЯ НА RENDER ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Игрик бот активен и работает 24/7!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.start()
 
 # Сбрасываем вебхук
 try:
@@ -44,7 +61,9 @@ SCHEDULE = {
         ["1 пара (08.30-10.10): Биология", "2 пара (10.20-12.00): Рус. лит", "3 пара (12.40-14.20): Физика", "4 пара (14.30-16.10): МП"]
     ],
     "Среда": [
-        ["1 пара (08.30-10.10): Матем", "2 пара (10.20-12.00): Бел. лит", "3 пара (12.40-14.20): География", "4 пара (14.30-16.10): Информ"],
+        # Индекс 0 (одна неделя — без информатики / под чертой)
+        ["1 пара (08.30-10.10): Матем", "2 пара (10.20-12.00): Бел. лит", "3 пара (12.40-14.20): География"],
+        # Индекс 1 (другая неделя — с информатикой)
         ["1 пара (08.30-10.10): Матем", "2 пара (10.20-12.00): Бел. лит", "3 пара (12.40-14.20): География", "4 пара (14.30-16.10): Информ"]
     ],
     "Четверг": [
@@ -225,7 +244,8 @@ def extract_subject_and_task(user_text):
 
 def get_week_type():
     week_number = get_now().isocalendar()[1]
-    return 1 if week_number % 2 != 0 else 0
+    # Смещение (+1) для точного попадания под чётность колледжа
+    return (week_number + 1) % 2
 
 
 def parse_date_input(date_str):
@@ -674,8 +694,10 @@ def process_admin_hw_change(message):
         )
 
 
-# --- ЗАПУСК БОТА С ЗАЩИТОЙ И УВЕДОМЛЕНИЕМ ---
+# --- ЗАПУСК БОТА С ЗАЩИТОЙ, FLASK И УВЕДОМЛЕНИЕМ ---
 if __name__ == "__main__":
+    print("Веб-сервер для удержания бодрствования запущен...")
+    keep_alive()
     print("Бот «Игрик» запущен...")
     try:
         bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
